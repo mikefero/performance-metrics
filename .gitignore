@@ -31,3 +31,25 @@
 # Debug files
 *.dSYM/
 *.su
+
+# Build directories
+build/
+
+# Generated config directories/files
+ext/autom4te.cache/
+ext/Makefile.global
+ext/acinclude.m4
+ext/aclocal.m4
+ext/config.guess
+ext/config.h.in
+ext/config.sub
+ext/configure
+ext/configure.in
+ext/install-sh
+ext/ltmain.sh
+ext/missing
+ext/mkinstalldirs
+ext/run-tests.php
+
+# Swap files
+*.swp
