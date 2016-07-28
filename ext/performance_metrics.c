@@ -310,28 +310,30 @@ PHP_METHOD(PerformanceMetrics, __construct) {
  * Returns an array representing the performance metrics snapshot
  *
  * Keys:
- * +----------+-------------------------------------------------------------+
- * | t        | Timestamp (in seconds)                                      |
- * | count    | Total count observed                                        |
- * | min      | Minimum latency observed (microseconds)                     |
- * | max      | Maximum latency observed (microseconds)                     |
- * | mean     | Mean of the latency observed (microseconds)                 |
- * | stddev   | Standard deviation of the latencies observed (microseconds) |
- * | median   | Median of the latencies observed (microseconds)             |
- * | p75      | Latency at the 75th percentile (microseconds)               |
- * | p95      | Latency at the 95th percentile (microseconds)               |
- * | p98      | Latency at the 98th percentile (microseconds)               |
- * | p99      | Latency at the 99th percentile (microseconds)               |
- * | p999     | Latency at the 999th percentile (microseconds)              |
- * | m1_rate  | One minute rate (per second)                                |
- * | m5_rate  | Five minute rate (per second)                               |
- * | m15_rate | Fifteen minute rate (per second)                            |
- * +----------+-------------------------------------------------------------+
+ * +------------+-------------------------------------------------------------+
+ * | t          | Timestamp (in seconds)                                      |
+ * | count      | Total count observed                                        |
+ * | min        | Minimum latency observed (microseconds)                     |
+ * | max        | Maximum latency observed (microseconds)                     |
+ * | mean       | Mean of the latency observed (microseconds)                 |
+ * | stddev     | Standard deviation of the latencies observed (microseconds) |
+ * | median/p50 | Median of the latencies observed (microseconds)             |
+ * | p75        | Latency at the 75th percentile (microseconds)               |
+ * | p95        | Latency at the 95th percentile (microseconds)               |
+ * | p98        | Latency at the 98th percentile (microseconds)               |
+ * | p99        | Latency at the 99th percentile (microseconds)               |
+ * | p999       | Latency at the 999th percentile (microseconds)              |
+ * | mean_rate  | Mean rate (per second)                                      |
+ * | m1_rate    | One minute rate (per second)                                |
+ * | m5_rate    | Five minute rate (per second)                               |
+ * | m15_rate   | Fifteen minute rate (per second)                            |
+ * +------------+-------------------------------------------------------------+
  */
 PHP_METHOD(PerformanceMetrics, metrics) {
   PerformanceMetrics* self = NULL;
   Metrics* metrics = NULL;
   struct hdr_histogram* hdr = NULL;
+  int64_t median = 0;
 
   /* Ensure that no arguments are passed in */
   if (zend_parse_parameters_none() == FAILURE) {
@@ -342,6 +344,7 @@ PHP_METHOD(PerformanceMetrics, metrics) {
   PHP_PERFORMANCE_METRICS_GET_METRICS_AND_HDR(self, metrics, hdr)
 
   /* Create the key/value pair array and assign the values */
+  median = hdr_value_at_percentile(hdr, 50.0);
   array_init(return_value);
   add_assoc_long(return_value, "t", get_timestamp());
   add_assoc_long(return_value, "count", hdr->total_count);
@@ -349,12 +352,14 @@ PHP_METHOD(PerformanceMetrics, metrics) {
   add_assoc_long(return_value, "max", hdr_max(hdr));
   add_assoc_long(return_value, "mean", (int64_t) hdr_mean(hdr));
   add_assoc_long(return_value, "stddev", (int64_t) hdr_stddev(hdr));
-  add_assoc_long(return_value, "median", hdr_value_at_percentile(hdr, 50.0));
+  add_assoc_long(return_value, "median", median);
+  add_assoc_long(return_value, "p50", median);
   add_assoc_long(return_value, "p75", hdr_value_at_percentile(hdr, 75.0));
   add_assoc_long(return_value, "p95", hdr_value_at_percentile(hdr, 95.0));
   add_assoc_long(return_value, "p98", hdr_value_at_percentile(hdr, 98.0));
   add_assoc_long(return_value, "p99", hdr_value_at_percentile(hdr, 99.0));
   add_assoc_long(return_value, "p999", hdr_value_at_percentile(hdr, 99.9));
+  add_assoc_double(return_value, "mean_rate", mean_rate(&metrics->m1_rate)); /* NOTE: All metered rates will have the same mean_rate */
   add_assoc_double(return_value, "m1_rate", metrics->m1_rate.rate);
   add_assoc_double(return_value, "m5_rate", metrics->m5_rate.rate);
   add_assoc_double(return_value, "m15_rate", metrics->m15_rate.rate);

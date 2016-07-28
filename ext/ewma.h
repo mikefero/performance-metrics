@@ -103,6 +103,23 @@ static inline void increment_ewma(EWMA* ewma) {
 #define mark_meter(meter) increment_ewma(meter)
 /* }}} */
 
+/* {{{ mean_rate(ewma|meter)
+ * Calculate the mean rate (over time)
+ */
+static inline double mean_rate(EWMA* ewma) {
+  uint64_t elapsed;
+
+  /* Determine if the mean rate can be calculated */
+  if (ewma->total_count <= 0) {
+    return 0.0;
+  }
+
+  /* Calculate and return the mean rate */
+  elapsed = get_fasttime() - ewma->start_time;
+  return ewma->total_count / (((double) elapsed) / NANOSEC);
+}
+/* }}} */
+
 /* {{{ tick_ewma(ewma)|tick_meter(meter)
  * Perform the tick for the rate if the interval rate has occurred
  *
