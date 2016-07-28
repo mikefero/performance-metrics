@@ -102,6 +102,10 @@ ZEND_TSRMLS_CACHE_EXTERN()
  */
 typedef struct _performance_metrics_Metrics {
   /**
+   * Mutex for ensuring synchronization
+   */
+  hdr_mutex mutex;
+  /**
    * HDR histogram instance
    */
   struct hdr_histogram* hdr;

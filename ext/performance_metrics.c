@@ -181,6 +181,7 @@ static void php_PerformanceMetrics_dtor(php_zend_resource resource TSRMLS_DC) {
 
   /* Determine if the Metrics memory can be cleaned up */
   if (metrics) {
+    hdr_mutex_destroy(&metrics->mutex);
     if (metrics->hdr) {
       free(metrics->hdr);
       metrics->hdr = NULL;
@@ -284,6 +285,7 @@ PHP_METHOD(PerformanceMetrics, __construct) {
   if (!self->metrics) {
     /* Initialize the new Metrics internal structure for persistent memory */
     self->metrics = (Metrics*) pecalloc(1, sizeof(Metrics), 1);
+    hdr_mutex_init(&self->metrics->mutex);
     hdr_init(LOWEST_TRACKABLE_VALUE, HIGHEST_TRACKABLE_VALUE, 3, &self->metrics->hdr);
     self->metrics->last_tick = 0;
     self->metrics->start_time = 0;
@@ -431,7 +433,7 @@ PHP_METHOD(PerformanceMetrics, observe) {
       zend_throw_exception_ex(
         spl_ce_InvalidArgumentException,
         0 TSRMLS_CC,
-        "Latency must be numberic and > 0, %Z given", zlatency
+        "Latency must be numeric and > 0, %Z given", zlatency
       );
     }
     latency = Z_LVAL_P(zlatency);
@@ -457,6 +459,7 @@ PHP_METHOD(PerformanceMetrics, observe) {
   }
 
   /* Observe/Record the latency */
+  hdr_mutex_lock(&metrics->mutex);
   if (!hdr_record_value(hdr, latency)) {
     zend_throw_exception_ex(
       spl_ce_RuntimeException,
@@ -464,6 +467,7 @@ PHP_METHOD(PerformanceMetrics, observe) {
       "Elapsed time [%d] is larger than the highest trackable value", latency
     );
   };
+  hdr_mutex_unlock(&metrics->mutex);
 
   /* Tick the metered rates */
   mark_meter(&metrics->m1_rate);
