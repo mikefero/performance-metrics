@@ -449,9 +449,9 @@ PHP_METHOD(PerformanceMetrics, tick_rates) {
   PHP_PERFORMANCE_METRICS_GET_METRICS(self, metrics)
 
   /* Tick the metered rates */
-  tick_meter_if_needed(&metrics->m1_rate);
-  tick_meter_if_needed(&metrics->m5_rate);
-  tick_meter_if_needed(&metrics->m15_rate);
+  tick_meter(&metrics->m1_rate);
+  tick_meter(&metrics->m5_rate);
+  tick_meter(&metrics->m15_rate);
 
   RETURN_TRUE;
 }

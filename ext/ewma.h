@@ -4,8 +4,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "utils.h"
+#include "hdr_atomic.h"
 #include "hdr_thread.h"
+
+#include "utils.h"
 
 /**
  * Structure calculating exponentially weighted moving averages
@@ -30,11 +32,11 @@ typedef struct _performance_metrics_ExponentiallyWeightedMovingAvergage {
 	/**
 	 * Total number of uncounted events
 	 */
-	uint64_t uncounted;
+	int64_t uncounted;
   /**
    * Total number of events
    */
-  uint64_t total_count;
+  int64_t total_count;
   /**
    * Time of the last tick interval
    */
@@ -93,53 +95,26 @@ static inline double calculate_alpha_decay(uint64_t time, uint64_t tick_interval
  * Increment the number of uncounted marks
  */
 static inline void increment_ewma(EWMA* ewma) {
-  ++ewma->uncounted;
-  ++ewma->total_count;
+  ewma->uncounted = hdr_atomic_add_fetch_64(&ewma->uncounted, 1);
+  ewma->total_count = hdr_atomic_add_fetch_64(&ewma->total_count, 1);
 }
-static inline void increment_meter(Meter* meter) {
-  increment_ewma(meter);
-}
-static inline void mark_ewma(EWMA* ewma) {
-  increment_ewma(ewma);
-}
-static inline void mark_meter(Meter* meter) {
-  increment_meter(meter);
-}
+#define increment_meter(meter) increment_ewma(meter)
+#define mark_ewma(ewma) increment_ewma(ewma)
+#define mark_meter(meter) increment_ewma(meter)
 /* }}} */
 
-/* {{{ tick_ewma(ewma) | tick_meter(meter)
- * Perform the tick/mark operation that should occur at the tick interval
+/* {{{ tick_ewma(ewma)|tick_meter(meter)
+ * Perform the tick for the rate if the interval rate has occurred
  *
  * NOTE: Standard tick interval initialization is 5 seconds for rate
  *       initializations
  */
 static inline void tick_ewma(EWMA* ewma) {
-  /* Calculate the instant rate and update the uncounted marks */
-  double instant_rate = ((double) ewma->uncounted) / ((double) ewma->tick_interval_s);
-  ewma->uncounted = 0;
-
-  if (ewma->is_initialized) {
-    ewma->rate += (ewma->alpha * (instant_rate - ewma->rate));
-  } else {
-    ewma->rate = instant_rate;
-    ewma->last_tick = ewma->start_time = get_fasttime();
-    ewma->is_initialized = true;
-  }
-}
-static inline void tick_meter(Meter* meter) {
-  tick_ewma(meter);
-}
-/* }}} */
-
-/* {{{ tick_ewma_if_needed(ewma)|tick_meter_if_needed(meter)
- * Perform the tick/mark for the rate if the interval rate has occurred
- *
- * NOTE: Standard tick interval initialization is 5 seconds for rate
- *       initializations
- */
-static inline void tick_ewma_if_needed(EWMA* ewma) {
   uint64_t now;
   uint64_t elapsed;
+
+  /* Calculate the instant rate and update the uncounted marks */
+  double instant_rate = ((double) ewma->uncounted) / ((double) ewma->tick_interval_s);
 
   /* Lock the mutex before updating the rate */
   hdr_mutex_lock(&ewma->mutex);
@@ -152,7 +127,15 @@ static inline void tick_ewma_if_needed(EWMA* ewma) {
     uint64_t ticks = (uint64_t) (elapsed / ewma->tick_interval_ns);
     int i = 0;
     for (i; i < ticks; ++i) {
-      tick_ewma(ewma);
+      ewma->uncounted = 0;
+
+      if (ewma->is_initialized) {
+        ewma->rate += (ewma->alpha * (instant_rate - ewma->rate));
+      } else {
+        ewma->rate = instant_rate;
+        ewma->last_tick = ewma->start_time = get_fasttime();
+        ewma->is_initialized = true;
+      }
     }
 
     /* Update the last tick */
@@ -162,10 +145,7 @@ static inline void tick_ewma_if_needed(EWMA* ewma) {
   /* Unlock the mutex */
   hdr_mutex_unlock(&ewma->mutex);
 }
-static inline void tick_meter_if_needed(Meter* meter) {
-  tick_ewma_if_needed(meter);
-}
+#define tick_meter(meter) tick_ewma(meter)
 /* }}} */
-
 
 #endif /* __METER_H__ */
