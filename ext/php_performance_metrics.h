@@ -161,10 +161,12 @@ static php_zend_object php_PerformanceMetrics_new(zend_class_entry *ce TSRMLS_DC
 
 /* PerformanceMetrics class methods */
 PHP_METHOD(PerformanceMetrics, __construct);
-PHP_METHOD(PerformanceMetrics, name);
+PHP_METHOD(PerformanceMetrics, elapsed_time);
 PHP_METHOD(PerformanceMetrics, metrics);
+PHP_METHOD(PerformanceMetrics, name);
 PHP_METHOD(PerformanceMetrics, observe);
-PHP_METHOD(PerformanceMetrics, start);
+PHP_METHOD(PerformanceMetrics, start_timer);
+PHP_METHOD(PerformanceMetrics, stop_timer);
 PHP_METHOD(PerformanceMetrics, tick_rates);
 
 #endif /* PHP_PERFORMANCE_METRICS_H */

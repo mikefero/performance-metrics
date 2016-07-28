@@ -60,7 +60,7 @@ typedef EWMA Meter;
 
 /* Macro initialization for EWMA */
 #define EWMA_INIT(ewma, seconds, interval_value) \
-  ewma.tick_interval_ns = interval_value * NANOSEC; \
+  ewma.tick_interval_ns = interval_value * SECONDS_TO_NANOSECONDS; \
   ewma.tick_interval_s = interval_value; \
   ewma.alpha = calculate_alpha_decay(seconds, interval_value); \
   ewma.is_initialized = false; \
@@ -107,7 +107,7 @@ static inline void increment_ewma(EWMA* ewma) {
  * Calculate the mean rate (over time)
  */
 static inline double mean_rate(EWMA* ewma) {
-  uint64_t elapsed;
+  uint64_t elapsed = 0;
 
   /* Determine if the mean rate can be calculated */
   if (ewma->total_count <= 0) {
@@ -116,7 +116,7 @@ static inline double mean_rate(EWMA* ewma) {
 
   /* Calculate and return the mean rate */
   elapsed = get_fasttime() - ewma->start_time;
-  return ewma->total_count / (((double) elapsed) / NANOSEC);
+  return ewma->total_count / (((double) elapsed) / SECONDS_TO_NANOSECONDS);
 }
 /* }}} */
 
@@ -127,8 +127,8 @@ static inline double mean_rate(EWMA* ewma) {
  *       initializations
  */
 static inline void tick_ewma(EWMA* ewma) {
-  uint64_t now;
-  uint64_t elapsed;
+  uint64_t now = 0;
+  uint64_t elapsed = 0;
 
   /* Calculate the instant rate and update the uncounted marks */
   double instant_rate = ((double) ewma->uncounted) / ((double) ewma->tick_interval_s);

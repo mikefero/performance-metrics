@@ -3,10 +3,8 @@
 
 #include "hdr_time.h"
 
-#ifdef NANOSEC
-# undef NANOSEC
-#endif
-#define NANOSEC ((uint64_t) 1e9)
+#define SECONDS_TO_NANOSECONDS ((uint64_t) 1e9)
+#define NANOSECONDS_TO_MICROSECONDS ((uint64_t) 1e3)
 
 #ifdef _WIN32
 # define EPOCH_DELTA 116444736000000000llu /* Delta since 1970/01/01 (Win32 epoch to Unix epoch) */
@@ -24,7 +22,7 @@ static inline uint64_t get_fasttime() {
   hdr_gettime(&t);
 
   /* Convert the timestamp to nanoseconds and return the value */
-  return (((uint64_t) t.tv_sec) * NANOSEC + t.tv_nsec);
+  return (((uint64_t) t.tv_sec) * SECONDS_TO_NANOSECONDS + t.tv_nsec);
 }
 /* }}} */
 

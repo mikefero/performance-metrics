@@ -134,16 +134,21 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo_name, 0, ZEND_RETURN_VALUE, 1)
   ZEND_ARG_INFO(0, name)
 ZEND_END_ARG_INFO()
+ZEND_BEGIN_ARG_INFO_EX(arginfo_latency, 0, ZEND_RETURN_VALUE, 1)
+  ZEND_ARG_INFO(0, latency)
+ZEND_END_ARG_INFO()
 
 /**
  * PHP PerformanceMetrics class methods
  */
 static zend_function_entry php_PerformanceMetrics_methods[] = {
   PHP_ME(PerformanceMetrics, __construct, arginfo_name, ZEND_ACC_PUBLIC)
-  PHP_ME(PerformanceMetrics, name, arginfo_name, ZEND_ACC_PUBLIC)
+  PHP_ME(PerformanceMetrics, elapsed_time, arginfo_none, ZEND_ACC_PUBLIC)
   PHP_ME(PerformanceMetrics, metrics, arginfo_none, ZEND_ACC_PUBLIC)
-  PHP_ME(PerformanceMetrics, observe, arginfo_none, ZEND_ACC_PUBLIC)
-  PHP_ME(PerformanceMetrics, start, arginfo_none, ZEND_ACC_PUBLIC)
+  PHP_ME(PerformanceMetrics, name, arginfo_name, ZEND_ACC_PUBLIC)
+  PHP_ME(PerformanceMetrics, observe, arginfo_latency, ZEND_ACC_PUBLIC)
+  PHP_ME(PerformanceMetrics, start_timer, arginfo_none, ZEND_ACC_PUBLIC)
+  PHP_ME(PerformanceMetrics, stop_timer, arginfo_none, ZEND_ACC_PUBLIC)
   PHP_ME(PerformanceMetrics, tick_rates, arginfo_none, ZEND_ACC_PUBLIC)
   PHP_FE_END
 };
@@ -306,6 +311,31 @@ PHP_METHOD(PerformanceMetrics, __construct) {
 }
 /* }}} */
 
+/* {{{ elapsed_time()
+ * Get the elapsed time
+ */
+PHP_METHOD(PerformanceMetrics, elapsed_time) {
+  PerformanceMetrics* self = NULL;
+  Metrics* metrics = NULL;
+  uint64_t elapsed = 0;
+
+  /* Ensure that no arguments are passed in */
+  if (zend_parse_parameters_none() == FAILURE) {
+    return;
+  }
+
+  /* Get the metrics from the PHP PerformanceMetrics instance */
+  PHP_PERFORMANCE_METRICS_GET_METRICS(self, metrics)
+
+  /* Calculate the elapsed time */
+  if (metrics->start_time > 0) {
+    elapsed = get_fasttime() - metrics->start_time;
+  }
+
+  RETURN_LONG(elapsed);
+}
+/* }}} */
+
 /* {{{ metrics()
  * Returns an array representing the performance metrics snapshot
  *
@@ -372,39 +402,66 @@ PHP_METHOD(PerformanceMetrics, metrics) {
 PHP_METHOD(PerformanceMetrics, name) {
   PerformanceMetrics* self = NULL;
 
-  if (zend_parse_parameters_none() == FAILURE) {
-    return;
-  }
-
-  self = PHP_PERFORMANCE_METRICS_GET_PERFORMANCE_METRICS(getThis());
-  PHP_RETURN_STRINGL(self->name, self->name_length);
- }
-
-/* {{{ observe()
- * Observe and record the latency in microseconds
- */
-PHP_METHOD(PerformanceMetrics, observe) {
-  PerformanceMetrics* self = NULL;
-  Metrics* metrics = NULL;
-  struct hdr_histogram* hdr = NULL;
-  uint64_t elapsed = 0;
-
   /* Ensure that no arguments are passed in */
   if (zend_parse_parameters_none() == FAILURE) {
     return;
   }
 
+  /* Return the name of the PHP PerformanceMetricS instance */
+  self = PHP_PERFORMANCE_METRICS_GET_PERFORMANCE_METRICS(getThis());
+  PHP_RETURN_STRINGL(self->name, self->name_length);
+ }
+
+/* {{{ observe(latency [optional])
+ * Observe and record the latency in microseconds (optional: latency)
+ */
+PHP_METHOD(PerformanceMetrics, observe) {
+  zval* zlatency = NULL;
+  PerformanceMetrics* self = NULL;
+  Metrics* metrics = NULL;
+  struct hdr_histogram* hdr = NULL;
+  uint64_t latency = 0;
+
+  /* Ensure that no arguments or the latency is passed in */
+  if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|z", &zlatency) == FAILURE) {
+    return;
+  }
+  if (ZEND_NUM_ARGS() == 1) {
+    if (Z_TYPE_P(zlatency) != IS_LONG || Z_LVAL_P(zlatency) == 0) {
+      zend_throw_exception_ex(
+        spl_ce_InvalidArgumentException,
+        0 TSRMLS_CC,
+        "Latency must be numberic and > 0, %Z given", zlatency
+      );
+    }
+    latency = Z_LVAL_P(zlatency);
+  }
+
   /* Get the metrics and histogram from the PHP PerformanceMetrics instance */
   PHP_PERFORMANCE_METRICS_GET_METRICS_AND_HDR(self, metrics, hdr)
 
+  /* Determine if the latency should be calculated */
+  if (ZEND_NUM_ARGS() == 0) {
+    if (metrics->start_time == 0) {
+      zend_throw_exception_ex(
+        spl_ce_InvalidArgumentException,
+        0 TSRMLS_CC,
+        "Time was not started and latency was not pass in as an argument"
+      );
+    }
+
+    /* Calculate the latency and reset the timer */
+    metrics->last_tick = get_fasttime();
+    latency = (metrics->last_tick - metrics->start_time) / NANOSECONDS_TO_MICROSECONDS;
+    metrics->start_time = 0;
+  }
+
   /* Observe/Record the latency */
-  metrics->last_tick = get_fasttime();
-  elapsed = (metrics->last_tick - metrics->start_time) / 1e3;
-  if (!hdr_record_value(hdr, elapsed)) {
+  if (!hdr_record_value(hdr, latency)) {
     zend_throw_exception_ex(
       spl_ce_RuntimeException,
       0 TSRMLS_CC,
-      "Elapsed time [%d] is larger than the highest trackable value", elapsed
+      "Elapsed time [%d] is larger than the highest trackable value", latency
     );
   };
 
@@ -417,10 +474,10 @@ PHP_METHOD(PerformanceMetrics, observe) {
 }
 /* }}} */
 
-/* {{{ start()
- * Start the latency observation
+/* {{{ start_timer()
+ * Start the timer (also used latency observation when latency not passed in)
  */
-PHP_METHOD(PerformanceMetrics, start) {
+PHP_METHOD(PerformanceMetrics, start_timer) {
   PerformanceMetrics* self = NULL;
   Metrics* metrics = NULL;
 
@@ -432,11 +489,47 @@ PHP_METHOD(PerformanceMetrics, start) {
   /* Get the metrics from the PHP PerformanceMetrics instance */
   PHP_PERFORMANCE_METRICS_GET_METRICS(self, metrics)
 
+  /* Ensure the timer has not already been started */
+  if (metrics->start_time > 0) {
+    zend_throw_exception_ex(
+      spl_ce_RuntimeException,
+      0 TSRMLS_CC,
+      "Timer has already been started"
+    );
+  }
+
   /* Assign the starting time for the upcoming observation */
   metrics->start_time = get_fasttime();
 
   RETURN_TRUE;
 }
+/* }}} */
+
+/* {{{ stop_timer()
+ * Stop and reset the timer; return the elapsed time
+ */
+PHP_METHOD(PerformanceMetrics, stop_timer) {
+  PerformanceMetrics* self = NULL;
+  Metrics* metrics = NULL;
+  uint64_t elapsed = 0;
+
+  /* Ensure that no arguments are passed in */
+  if (zend_parse_parameters_none() == FAILURE) {
+    return;
+  }
+
+  /* Get the metrics from the PHP PerformanceMetrics instance */
+  PHP_PERFORMANCE_METRICS_GET_METRICS(self, metrics)
+
+  /* Calculate the elapsed time and reset the start timer */
+  if (metrics->start_time > 0) {
+    elapsed = get_fasttime() - metrics->start_time;
+    metrics->start_time = 0;
+  }
+
+  RETURN_LONG(elapsed);
+}
+/* }}} */
 
 /* {{{ tick_rates()
  * Tick the metered rates (if needed)
