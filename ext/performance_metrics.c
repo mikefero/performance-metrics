@@ -442,6 +442,9 @@ PHP_METHOD(PerformanceMetrics, observe) {
   /* Get the metrics and histogram from the PHP PerformanceMetrics instance */
   PHP_PERFORMANCE_METRICS_GET_METRICS_AND_HDR(self, metrics, hdr)
 
+  /* Lock the mutex before recording the latency and incrementing the rates */
+  hdr_mutex_lock(&metrics->mutex);
+
   /* Determine if the latency should be calculated */
   if (ZEND_NUM_ARGS() == 0) {
     if (metrics->start_time == 0) {
@@ -459,7 +462,6 @@ PHP_METHOD(PerformanceMetrics, observe) {
   }
 
   /* Observe/Record the latency */
-  hdr_mutex_lock(&metrics->mutex);
   if (!hdr_record_value(hdr, latency)) {
     zend_throw_exception_ex(
       spl_ce_RuntimeException,
@@ -467,12 +469,14 @@ PHP_METHOD(PerformanceMetrics, observe) {
       "Elapsed time [%d] is larger than the highest trackable value", latency
     );
   };
-  hdr_mutex_unlock(&metrics->mutex);
 
   /* Tick the metered rates */
   mark_meter(&metrics->m1_rate);
   mark_meter(&metrics->m5_rate);
   mark_meter(&metrics->m15_rate);
+
+  /* Unlock the mutex */
+  hdr_mutex_unlock(&metrics->mutex);
 
   RETURN_TRUE;
 }
