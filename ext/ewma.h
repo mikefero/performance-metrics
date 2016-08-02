@@ -66,7 +66,7 @@ typedef EWMA Meter;
   ewma.is_initialized = false; \
   ewma.uncounted = 0; \
   ewma.total_count = 0; \
-  ewma.last_tick = 0; \
+  ewma.last_tick = get_fasttime(); \
   ewma.start_time = 0; \
   ewma.rate = 0.0; \
   hdr_mutex_init(&ewma.mutex);
@@ -87,7 +87,7 @@ typedef EWMA Meter;
  * EWMA and the tick interval for the rate calculation
  */
 static inline double calculate_alpha_decay(uint64_t time, uint64_t tick_interval) {
-  return 1.0 - exp((-(double) tick_interval) / ((double) time));
+  return 1.0 - exp(-((double) tick_interval) / 60.0 / ((double) time));
 }
 
 /* {{{ increment_ewma(ewma) | increment_meter(meter)
@@ -130,9 +130,6 @@ static inline void tick_ewma(EWMA* ewma) {
   uint64_t now = 0;
   uint64_t elapsed = 0;
 
-  /* Calculate the instant rate and update the uncounted marks */
-  double instant_rate = ((double) ewma->uncounted) / ((double) ewma->tick_interval_s);
-
   /* Lock the mutex before updating the rate */
   hdr_mutex_lock(&ewma->mutex);
 
@@ -140,22 +137,24 @@ static inline void tick_ewma(EWMA* ewma) {
   now = get_fasttime();
   elapsed = (now - ewma->last_tick);
   if (elapsed > ewma->tick_interval_ns) {
-    /* Determine the amount of ticks to perform */
+    /* Determine the amount of ticks to perform and the instant rate */
     uint64_t ticks = (uint64_t) (elapsed / ewma->tick_interval_ns);
+    double instant_rate = ((double) ewma->uncounted) / ((double) ewma->tick_interval_s);
+
+    /* Perform the required ticks */
     int i = 0;
     for (i; i < ticks; ++i) {
-      ewma->uncounted = 0;
-
       if (ewma->is_initialized) {
-        ewma->rate += (ewma->alpha * (instant_rate - ewma->rate));
+        ewma->rate = ewma->rate + (ewma->alpha * (instant_rate - ewma->rate));
       } else {
         ewma->rate = instant_rate;
-        ewma->last_tick = ewma->start_time = get_fasttime();
+        ewma->start_time = now;
         ewma->is_initialized = true;
       }
     }
 
     /* Update the last tick */
+    ewma->uncounted = 0;
     ewma->last_tick = now;
   }
 
