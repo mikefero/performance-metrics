@@ -14,25 +14,25 @@
  */
 typedef struct _performance_metrics_ExponentiallyWeightedMovingAvergage {
   /**
-	 * Alpha decay for exponential weighted moving average
-	 */
-	double alpha;
-	/**
-	 * Tick interval for metered rate (in nanoseconds)
-	 */
-	uint64_t tick_interval_ns;
+   * Alpha decay for exponential weighted moving average
+   */
+  double alpha;
   /**
-	 * Tick interval for metered rate (seconds)
-	 */
-	uint64_t tick_interval_s;
-	/**
-	 * Flag to determine if the EWMA has been initialized
-	 */
-	bool is_initialized;
-	/**
+   * Tick interval for metered rate (in nanoseconds)
+   */
+  uint64_t tick_interval_ns;
+  /**
+   * Tick interval for metered rate (seconds)
+   */
+  uint64_t tick_interval_s;
+  /**
+   * Flag to determine if the EWMA has been initialized
+   */
+  bool is_initialized;
+  /**
 	 * Total number of uncounted events
 	 */
-	int64_t uncounted;
+  int64_t uncounted;
   /**
    * Total number of events
    */
@@ -45,10 +45,10 @@ typedef struct _performance_metrics_ExponentiallyWeightedMovingAvergage {
    * Starting time (first mark)
    */
   uint64_t start_time;
-	/**
+  /**
 	 * EWMA rate
 	 */
-	double rate;
+  double rate;
   /**
    * Mutex for ensuring synchronization
    */
